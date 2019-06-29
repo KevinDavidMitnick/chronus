@@ -16,7 +16,8 @@ chronus是基于influxdb开发的分布式时序数据库。
 - 不依赖第三方服务
 
 ## Architecture
-![architecture](./docs/architecture.png)
+<img src="./docs/architecture.png" width=360 height=360 />
+
 
 - meta server：负责元数据的存储和管理
 
