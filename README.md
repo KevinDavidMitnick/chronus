@@ -24,18 +24,18 @@ chronus是基于influxdb开发的分布式时序数据库。
 
 ## compile
 
-export GO111MODULE=on
+- export GO111MODULE=on
 
-需要梯子：export 
+- 需要梯子：export 
 GOPROXY=https://goproxy.io
 
-mkdir workspace/src/github.com/angopher && cd go_path_dir/src/github.com/angopher
+- mkdir workspace/src/github.com/angopher && cd go_path_dir/src/github.com/angopher
 
-git clone https://github.com/angopher/chronus.git
+- git clone https://github.com/angopher/chronus.git
 
-编译influxd： cd cmd/influxd && go build && cd ..
+- 编译influxd： cd cmd/influxd && go build && cd ..
 
-编译metad：cd cmd/metad && go build
+- 编译metad：cd cmd/metad && go build
 
 ## run
 
@@ -54,20 +54,18 @@ git clone https://github.com/angopher/chronus.git
 ## Getting Started
 
 创建第一个数据库
-curl -XPOST "http://localhost:8086/query" --data-urlencode "q=CREATE DATABASE mydb"
+- curl -XPOST "http://localhost:8086/query" --data-urlencode "q=CREATE DATABASE mydb"
 
 写入数据
-curl -XPOST "http://localhost:8086/write?db=mydb" -d 'cpu,host=server01,region=uswest load=42 1434055562000000000'
-
-curl -XPOST "http://localhost:8086/write?db=mydb" -d 'cpu,host=server02,region=uswest load=78 1434055562000000000'
-
-curl -XPOST "http://localhost:8086/write?db=mydb"  -d 'cpu,host=server03,region=useast load=15.4 1434055562000000000'
+- curl -XPOST "http://localhost:8086/write?db=mydb" -d 'cpu,host=server01,region=uswest load=42 1434055562000000000'
+- curl -XPOST "http://localhost:8086/write?db=mydb" -d 'cpu,host=server02,region=uswest load=78 1434055562000000000'
+- curl -XPOST "http://localhost:8086/write?db=mydb"  -d 'cpu,host=server03,region=useast load=15.4 1434055562000000000'
 
 查询
-curl -G "http://localhost:8086/query?pretty=true" --data-urlencode "db=mydb" --data-urlencode "q=SELECT * FROM cpu WHERE host='server01' AND time < now() - 1d"
+- curl -G "http://localhost:8086/query?pretty=true" --data-urlencode "db=mydb" --data-urlencode "q=SELECT * FROM cpu WHERE host='server01' AND time < now() - 1d"
 
 分析
-curl -G "http://localhost:8086/query?pretty=true" --data-urlencode "db=mydb" --data-urlencode "q=SELECT mean(load) FROM cpu WHERE region='uswest'"
+- curl -G "http://localhost:8086/query?pretty=true" --data-urlencode "db=mydb" --data-urlencode "q=SELECT mean(load) FROM cpu WHERE region='uswest'"
 
 ## Licensing
 See LICENSE
