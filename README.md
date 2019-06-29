@@ -30,7 +30,7 @@ chronus是基于influxdb开发的分布式时序数据库。
 - 需要梯子：export 
 GOPROXY=https://goproxy.io
 
-- mkdir -p workspace/src/github.com/angopher && cd go_path_dir/src/github.com/angopher
+- mkdir -p workspace/src/github.com/angopher && cd workspace/src/github.com/angopher
 
 - git clone https://github.com/angopher/chronus.git
 
