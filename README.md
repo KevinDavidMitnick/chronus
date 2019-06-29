@@ -32,7 +32,7 @@ GOPROXY=https://goproxy.io
 
 - mkdir -p workspace/src/github.com/angopher && cd workspace/src/github.com/angopher
 
-- git clone https://github.com/angopher/chronus.git
+- git clone https://github.com/angopher/chronus.git && cd chronus
 
 - 编译influxd： cd cmd/influxd && go build && cd ..
 
