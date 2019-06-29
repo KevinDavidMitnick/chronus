@@ -8404,6 +8404,8 @@ func TestServer_ContinuousQuery(t *testing.T) {
 	s := OpenServer(NewConfig())
 	//defer s.Close()
 
+	time.Sleep(time.Second)
+
 	if err := s.CreateDatabaseAndRetentionPolicy("db0", NewRetentionPolicySpec("rp0", 1, 0), true); err != nil {
 		t.Fatal(err)
 	}

@@ -27,7 +27,7 @@ import (
 )
 
 func NewDefaultConfig() *Config {
-	c := &Config{rootPath: "/tmp/test_path", Config: run.NewConfig()}
+	c := &Config{rootPath: "/tmp/.chronus_test_path", Config: run.NewConfig()}
 	c.Meta.Dir = "./meta"
 	c.Data.Dir = "./data"
 	c.Data.WALDir = "./wal"
