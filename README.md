@@ -67,5 +67,5 @@ GOPROXY=https://goproxy.io
 分析
 - curl -G "http://localhost:8086/query?pretty=true" --data-urlencode "db=mydb" --data-urlencode "q=SELECT mean(load) FROM cpu WHERE region='uswest'"
 
-## Licensing
-See LICENSE
+## License
+chronus is under the MIT license. See the [LICENSE](LICENSE) file for details.
