@@ -16,11 +16,12 @@ chronus是基于influxdb开发的分布式时序数据库。
 - 不依赖第三方服务
 
 ## Architecture
-![architecture](./docs/architecture.png)
+<img src="./docs/architecture.png" width=360 height=360 />
+
 
 - meta server：负责元数据的存储和管理
 
-- data server：负责真实用户数据的存储和管理，并向meta server获取元数据。所有涉及到元数据的修改，都会请求到meta server，由meta server执行修改，并同步给集群内所有的data server
+- data server：负责数据的存储和管理，并向meta server获取元数据。所有涉及到元数据的修改，都会请求到meta server，由meta server执行修改，并同步给集群内所有的data server
 
 ## compile
 
@@ -29,7 +30,7 @@ chronus是基于influxdb开发的分布式时序数据库。
 - 需要梯子：export 
 GOPROXY=https://goproxy.io
 
-- mkdir workspace/src/github.com/angopher && cd go_path_dir/src/github.com/angopher
+- mkdir -p workspace/src/github.com/angopher && cd go_path_dir/src/github.com/angopher
 
 - git clone https://github.com/angopher/chronus.git
 
