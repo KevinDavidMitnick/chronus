@@ -1,5 +1,5 @@
 # chronus
-chronus是基于influxdb1.7.x版本开发的分布式时序数据库。
+chronus是基于influxdb1.7.x版本开发的分布式时序数据库，兼容官方的influxql。
 
 ## Features
 
