@@ -34,7 +34,7 @@ GOPROXY=https://goproxy.io
 
 - cd workspace/src/github.com/angopher
 
-- git clone https://github.com/angopher/chronus.git && cd chronus
+- git clone https://github.com/KevinDavidMitnick/chronus.git && cd chronus
 
 - 编译influxd： cd cmd/influxd && go build && cd -
 

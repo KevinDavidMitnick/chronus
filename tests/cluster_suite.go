@@ -20,10 +20,10 @@ import (
 	"github.com/influxdata/influxdb/services/httpd"
 	"github.com/influxdata/influxdb/services/meta"
 
-	"github.com/angopher/chronus/cmd/influxd/run"
-	"github.com/angopher/chronus/coordinator"
-	"github.com/angopher/chronus/raftmeta"
-	"github.com/angopher/chronus/x"
+	"github.com/KevinDavidMitnick/chronus/cmd/influxd/run"
+	"github.com/KevinDavidMitnick/chronus/coordinator"
+	"github.com/KevinDavidMitnick/chronus/raftmeta"
+	"github.com/KevinDavidMitnick/chronus/x"
 )
 
 func NewDefaultConfig() *Config {

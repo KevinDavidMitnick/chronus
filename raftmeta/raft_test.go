@@ -12,10 +12,10 @@ import (
 	"github.com/influxdata/influxdb/logger"
 	"github.com/influxdata/influxdb/services/meta"
 
-	"github.com/angopher/chronus/raftmeta"
-	"github.com/angopher/chronus/raftmeta/internal"
-	imeta "github.com/angopher/chronus/services/meta"
-	"github.com/angopher/chronus/x"
+	"github.com/KevinDavidMitnick/chronus/raftmeta"
+	"github.com/KevinDavidMitnick/chronus/raftmeta/internal"
+	imeta "github.com/KevinDavidMitnick/chronus/services/meta"
+	"github.com/KevinDavidMitnick/chronus/x"
 )
 
 type applyData struct {

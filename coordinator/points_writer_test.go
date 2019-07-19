@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/angopher/chronus/coordinator"
+	"github.com/KevinDavidMitnick/chronus/coordinator"
 	"github.com/influxdata/influxdb"
 	influxdb_coordinator "github.com/influxdata/influxdb/coordinator"
 	"github.com/influxdata/influxdb/models"

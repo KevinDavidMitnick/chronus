@@ -9,7 +9,7 @@ import (
 
 	"github.com/influxdata/influxdb/models"
 
-	"github.com/angopher/chronus/services/meta"
+	"github.com/KevinDavidMitnick/chronus/services/meta"
 )
 
 type fakeShardWriter struct {

@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/angopher/chronus/raftmeta/internal"
-	imeta "github.com/angopher/chronus/services/meta"
+	"github.com/KevinDavidMitnick/chronus/raftmeta/internal"
+	imeta "github.com/KevinDavidMitnick/chronus/services/meta"
 	"github.com/influxdata/influxdb/services/meta"
 	"github.com/influxdata/influxql"
 	"go.uber.org/zap"

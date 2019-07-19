@@ -11,9 +11,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/angopher/chronus/cmd"
-	"github.com/angopher/chronus/cmd/influxd/help"
-	"github.com/angopher/chronus/cmd/influxd/run"
+	"github.com/KevinDavidMitnick/chronus/cmd"
+	"github.com/KevinDavidMitnick/chronus/cmd/influxd/help"
+	"github.com/KevinDavidMitnick/chronus/cmd/influxd/run"
 )
 
 // These variables are populated via the Go linker.

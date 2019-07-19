@@ -1,7 +1,7 @@
 package raftmeta
 
 import (
-	imeta "github.com/angopher/chronus/services/meta"
+	imeta "github.com/KevinDavidMitnick/chronus/services/meta"
 	"github.com/influxdata/influxdb/services/meta"
 	"github.com/influxdata/influxql"
 	"time"

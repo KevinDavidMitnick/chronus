@@ -14,8 +14,8 @@ import (
 	"github.com/influxdata/influxdb/services/meta"
 	"github.com/influxdata/influxql"
 
-	"github.com/angopher/chronus/raftmeta"
-	imeta "github.com/angopher/chronus/services/meta"
+	"github.com/KevinDavidMitnick/chronus/raftmeta"
+	imeta "github.com/KevinDavidMitnick/chronus/services/meta"
 )
 
 type MetaClientImpl struct {

@@ -2,7 +2,7 @@ package command
 
 import (
 	"fmt"
-	"github.com/angopher/chronus/cmd/influxd-ctl/action"
+	"github.com/KevinDavidMitnick/chronus/cmd/influxd-ctl/action"
 	"github.com/spf13/cobra"
 )
 

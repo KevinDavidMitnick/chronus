@@ -6,7 +6,7 @@ import (
 
 	"github.com/influxdata/influxdb/services/meta"
 
-	imeta "github.com/angopher/chronus/services/meta"
+	imeta "github.com/KevinDavidMitnick/chronus/services/meta"
 )
 
 func newData() *imeta.Data {

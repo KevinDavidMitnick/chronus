@@ -7,7 +7,7 @@ import (
 	"go.uber.org/zap"
 	"time"
 
-	imeta "github.com/angopher/chronus/services/meta"
+	imeta "github.com/KevinDavidMitnick/chronus/services/meta"
 )
 
 type ClusterMetaClient struct {

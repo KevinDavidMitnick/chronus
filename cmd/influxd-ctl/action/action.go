@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/angopher/chronus/coordinator"
-	"github.com/angopher/chronus/services/controller"
+	"github.com/KevinDavidMitnick/chronus/coordinator"
+	"github.com/KevinDavidMitnick/chronus/services/controller"
 )
 
 func CopyShard(srcAddr, dstAddr, shardID string) error {

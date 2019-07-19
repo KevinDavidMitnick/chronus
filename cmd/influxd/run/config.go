@@ -30,9 +30,9 @@ import (
 	"golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/transform"
 
-	"github.com/angopher/chronus/coordinator"
-	"github.com/angopher/chronus/services/controller"
-	"github.com/angopher/chronus/services/hh"
+	"github.com/KevinDavidMitnick/chronus/coordinator"
+	"github.com/KevinDavidMitnick/chronus/services/controller"
+	"github.com/KevinDavidMitnick/chronus/services/hh"
 )
 
 const (

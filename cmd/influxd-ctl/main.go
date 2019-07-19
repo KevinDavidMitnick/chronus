@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/angopher/chronus/cmd/influxd-ctl/command"
+	"github.com/KevinDavidMitnick/chronus/cmd/influxd-ctl/command"
 )
 
 func main() {

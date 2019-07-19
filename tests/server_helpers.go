@@ -15,8 +15,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/angopher/chronus/cmd/influxd/run"
-	"github.com/angopher/chronus/x"
+	"github.com/KevinDavidMitnick/chronus/cmd/influxd/run"
+	"github.com/KevinDavidMitnick/chronus/x"
 	"github.com/influxdata/influxdb/models"
 	"github.com/influxdata/influxdb/services/httpd"
 	"github.com/influxdata/influxdb/services/meta"

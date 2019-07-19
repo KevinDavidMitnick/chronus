@@ -16,8 +16,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/influxdata/influxdb/models"
 
-	"github.com/angopher/chronus/coordinator"
-	"github.com/angopher/chronus/raftmeta"
+	"github.com/KevinDavidMitnick/chronus/coordinator"
+	"github.com/KevinDavidMitnick/chronus/raftmeta"
 )
 
 var db = "db0"

@@ -14,7 +14,7 @@ import (
 	"github.com/influxdata/influxdb/services/meta"
 	"go.uber.org/zap"
 
-	"github.com/angopher/chronus/coordinator"
+	"github.com/KevinDavidMitnick/chronus/coordinator"
 )
 
 const (

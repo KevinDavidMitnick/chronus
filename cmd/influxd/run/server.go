@@ -41,10 +41,10 @@ import (
 	// Initialize the index package
 	_ "github.com/influxdata/influxdb/tsdb/index"
 
-	"github.com/angopher/chronus/coordinator"
-	"github.com/angopher/chronus/services/controller"
-	"github.com/angopher/chronus/services/hh"
-	imeta "github.com/angopher/chronus/services/meta"
+	"github.com/KevinDavidMitnick/chronus/coordinator"
+	"github.com/KevinDavidMitnick/chronus/services/controller"
+	"github.com/KevinDavidMitnick/chronus/services/hh"
+	imeta "github.com/KevinDavidMitnick/chronus/services/meta"
 )
 
 var startTime time.Time
