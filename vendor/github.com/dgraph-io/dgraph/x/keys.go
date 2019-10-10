@@ -34,9 +34,6 @@ const (
 	// keys of same attributes are located together
 	defaultPrefix = byte(0x00)
 	byteSchema    = byte(0x01)
-	byteType      = byte(0x02)
-	// ByteUnused is a constant to specify keys which need to be discarded.
-	ByteUnused = byte(0xff)
 )
 
 func writeAttr(buf []byte, attr string) []byte {
@@ -49,13 +46,9 @@ func writeAttr(buf []byte, attr string) []byte {
 	return rest[len(attr):]
 }
 
-// SchemaKey returns schema key for given attribute. Schema keys are stored
-// separately with unique prefix, since we need to iterate over all schema keys.
-// The structure of a schema key is as follows:
-//
-// byte 0: key type prefix (set to byteSchema)
-// byte 1-2: length of attr
-// next len(attr) bytes: value of attr
+// SchemaKey returns schema key for given attribute,
+// schema keys are stored separately with unique prefix,
+// since we need to iterate over all schema keys
 func SchemaKey(attr string) []byte {
 	buf := make([]byte, 1+2+len(attr))
 	buf[0] = byteSchema
@@ -263,10 +256,6 @@ func Parse(key []byte) *ParsedKey {
 	p := &ParsedKey{}
 
 	p.bytePrefix = key[0]
-	if p.bytePrefix == ByteUnused {
-		return p
-	}
-
 	sz := int(binary.BigEndian.Uint16(key[1:3]))
 	k := key[3:]
 

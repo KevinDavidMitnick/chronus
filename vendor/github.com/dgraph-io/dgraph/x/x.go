@@ -25,7 +25,6 @@ import (
 	"math/rand"
 	"net"
 	"net/http"
-	"os"
 	"regexp"
 	"sort"
 	"strconv"
@@ -35,12 +34,11 @@ import (
 	"go.opencensus.io/trace"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/encoding/gzip"
 )
 
 // Error constants representing different types of errors.
 var (
-	ErrNotSupported = fmt.Errorf("Feature available only in Dgraph Enterprise Edition")
+	ErrNotSupported = fmt.Errorf("Feature available only in Dgraph Enterprise Edition.")
 )
 
 const (
@@ -79,8 +77,18 @@ var (
 	// Useful for running multiple servers on the same machine.
 	regExpHostName = regexp.MustCompile(ValidHostnameRegex)
 	InitialPreds   = map[string]struct{}{
-		PredicateListAttr: {},
+		PredicateListAttr:   {},
+		"dgraph.xid":        {},
+		"dgraph.password":   {},
+		"dgraph.user.group": {},
+		"dgraph.group.acl":  {},
 	}
+	AclPredsJson = `
+{"predicate":"dgraph.group.acl", "type":"string"},
+{"predicate":"dgraph.password", "type":"password"},
+{"reverse":true, "predicate":"dgraph.user.group", "type":"uid"},
+{"index":true, "tokenizer":["exact"], "predicate":"dgraph.xid", "type":"string"}
+`
 	Nilbyte []byte
 )
 
@@ -104,6 +112,13 @@ type errRes struct {
 
 type queryRes struct {
 	Errors []errRes `json:"errors"`
+}
+
+// SetError sets the error logged in this package.
+func SetError(prev *error, n error) {
+	if prev == nil {
+		prev = &n
+	}
 }
 
 // SetStatus sets the error code, message and the newly assigned uids
@@ -333,7 +348,7 @@ func (b *BytesBuffer) grow(n int) {
 	b.off = 0
 }
 
-// returns a slice of length n to be used to writing
+// returns a slice of lenght n to be used to writing
 func (b *BytesBuffer) Slice(n int) []byte {
 	b.grow(n)
 	last := len(b.data) - 1
@@ -368,14 +383,10 @@ func (b *BytesBuffer) TruncateBy(n int) {
 	AssertTrue(b.off >= 0 && b.sz >= 0)
 }
 
-type record struct {
-	Name string
-	Dur  time.Duration
-}
 type Timer struct {
 	start   time.Time
 	last    time.Time
-	records []record
+	records []time.Duration
 }
 
 func (t *Timer) Start() {
@@ -384,24 +395,18 @@ func (t *Timer) Start() {
 	t.records = t.records[:0]
 }
 
-func (t *Timer) Record(name string) {
+func (t *Timer) Record() {
 	now := time.Now()
-	t.records = append(t.records, record{
-		Name: name,
-		Dur:  now.Sub(t.last).Round(time.Millisecond),
-	})
+	t.records = append(t.records, now.Sub(t.last))
 	t.last = now
 }
 
 func (t *Timer) Total() time.Duration {
-	return time.Since(t.start).Round(time.Millisecond)
+	return time.Since(t.start)
 }
 
-func (t *Timer) String() string {
-	sort.Slice(t.records, func(i, j int) bool {
-		return t.records[i].Dur > t.records[j].Dur
-	})
-	return fmt.Sprintf("Timer Total: %s. Breakdown: %v", t.Total(), t.records)
+func (t *Timer) All() []time.Duration {
+	return t.records
 }
 
 // PredicateLang extracts the language from a predicate (or facet) name.
@@ -426,18 +431,11 @@ func DivideAndRule(num int) (numGo, width int) {
 	return
 }
 
-func SetupConnection(host string, tlsConf *TLSHelperConfig, useGz bool) (*grpc.ClientConn, error) {
-	callOpts := append([]grpc.CallOption{},
-		grpc.MaxCallRecvMsgSize(GrpcMaxSize),
-		grpc.MaxCallSendMsgSize(GrpcMaxSize))
-
-	if useGz {
-		fmt.Fprintf(os.Stderr, "Using compression with %s\n", host)
-		callOpts = append(callOpts, grpc.UseCompressor(gzip.Name))
-	}
-
-	dialOpts := append([]grpc.DialOption{},
-		grpc.WithDefaultCallOptions(callOpts...),
+func SetupConnection(host string, tlsConf *TLSHelperConfig) (*grpc.ClientConn, error) {
+	opts := append([]grpc.DialOption{},
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(GrpcMaxSize),
+			grpc.MaxCallSendMsgSize(GrpcMaxSize)),
 		grpc.WithBlock(),
 		grpc.WithTimeout(10*time.Second))
 
@@ -447,29 +445,29 @@ func SetupConnection(host string, tlsConf *TLSHelperConfig, useGz bool) (*grpc.C
 		if err != nil {
 			return nil, err
 		}
-		dialOpts = append(dialOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)))
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(tlsCfg)))
 	} else {
-		dialOpts = append(dialOpts, grpc.WithInsecure())
+		opts = append(opts, grpc.WithInsecure())
 	}
-	return grpc.Dial(host, dialOpts...)
+	return grpc.Dial(host, opts...)
 }
 
-func Diff(dst map[string]struct{}, src map[string]struct{}) ([]string, []string) {
-	var add []string
-	var del []string
+func Diff(targetMap map[string]struct{}, existingMap map[string]struct{}) ([]string, []string) {
+	var newGroups []string
+	var groupsToBeDeleted []string
 
-	for g := range dst {
-		if _, ok := src[g]; !ok {
-			add = append(add, g)
+	for g := range targetMap {
+		if _, ok := existingMap[g]; !ok {
+			newGroups = append(newGroups, g)
 		}
 	}
-	for g := range src {
-		if _, ok := dst[g]; !ok {
-			del = append(del, g)
+	for g := range existingMap {
+		if _, ok := targetMap[g]; !ok {
+			groupsToBeDeleted = append(groupsToBeDeleted, g)
 		}
 	}
 
-	return add, del
+	return newGroups, groupsToBeDeleted
 }
 
 func SpanTimer(span *trace.Span, name string) func() {

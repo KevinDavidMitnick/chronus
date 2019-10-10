@@ -23,16 +23,45 @@ import (
 	"math"
 	"sync"
 
+	"github.com/coreos/etcd/raft"
+	pb "github.com/coreos/etcd/raft/raftpb"
 	"github.com/dgraph-io/badger"
-	"github.com/gogo/protobuf/proto"
 	"github.com/golang/glog"
-	"go.etcd.io/etcd/raft"
-	"go.etcd.io/etcd/raft/raftpb"
 	"golang.org/x/net/trace"
 
-	"github.com/dgraph-io/dgraph/protos/pb"
 	"github.com/dgraph-io/dgraph/x"
 )
+
+type localCache struct {
+	sync.RWMutex
+	firstIndex uint64
+	snap       pb.Snapshot
+}
+
+func (c *localCache) setFirst(first uint64) {
+	c.Lock()
+	defer c.Unlock()
+	c.firstIndex = first
+}
+
+func (c *localCache) first() uint64 {
+	c.RLock()
+	defer c.RUnlock()
+	return c.firstIndex
+}
+
+func (c *localCache) setSnapshot(s pb.Snapshot) {
+	c.Lock()
+	defer c.Unlock()
+	c.snap = s
+	c.firstIndex = 0 // Reset firstIndex.
+}
+
+func (c *localCache) snapshot() pb.Snapshot {
+	c.RLock()
+	defer c.RUnlock()
+	return c.snap
+}
 
 type DiskStorage struct {
 	db   *badger.DB
@@ -40,11 +69,11 @@ type DiskStorage struct {
 	gid  uint32
 	elog trace.EventLog
 
-	cache *sync.Map
+	cache localCache
 }
 
 func Init(db *badger.DB, id uint64, gid uint32) *DiskStorage {
-	w := &DiskStorage{db: db, id: id, gid: gid, cache: new(sync.Map)}
+	w := &DiskStorage{db: db, id: id, gid: gid}
 	x.Check(w.StoreRaftId(id))
 	w.elog = trace.NewEventLog("Badger", "RaftStorage")
 
@@ -56,7 +85,7 @@ func Init(db *badger.DB, id uint64, gid uint32) *DiskStorage {
 
 	_, err = w.FirstIndex()
 	if err == errNotFound {
-		ents := make([]raftpb.Entry, 1)
+		ents := make([]pb.Entry, 1)
 		x.Check(w.reset(ents))
 	} else {
 		x.Check(err)
@@ -100,14 +129,6 @@ func (w *DiskStorage) hardStateKey() []byte {
 	return b
 }
 
-func (w *DiskStorage) CheckpointKey() []byte {
-	b := make([]byte, 14)
-	binary.BigEndian.PutUint64(b[0:8], w.id)
-	copy(b[8:10], []byte("ck"))
-	binary.BigEndian.PutUint32(b[10:14], w.gid)
-	return b
-}
-
 func (w *DiskStorage) entryKey(idx uint64) []byte {
 	b := make([]byte, 20)
 	binary.BigEndian.PutUint64(b[0:8], w.id)
@@ -136,38 +157,6 @@ func (w *DiskStorage) StoreRaftId(id uint64) error {
 	})
 }
 
-func (w *DiskStorage) UpdateCheckpoint(snap *pb.Snapshot) error {
-	return w.db.Update(func(txn *badger.Txn) error {
-		data, err := snap.Marshal()
-		if err != nil {
-			return err
-		}
-		return txn.Set(w.CheckpointKey(), data)
-	})
-}
-
-func (w *DiskStorage) Checkpoint() (uint64, error) {
-	var applied uint64
-	err := w.db.View(func(txn *badger.Txn) error {
-		item, err := txn.Get(w.CheckpointKey())
-		if err == badger.ErrKeyNotFound {
-			return nil
-		}
-		if err != nil {
-			return err
-		}
-		return item.Value(func(val []byte) error {
-			var snap pb.Snapshot
-			if err := snap.Unmarshal(val); err != nil {
-				return err
-			}
-			applied = snap.Index
-			return nil
-		})
-	})
-	return applied, err
-}
-
 // Term returns the term of entry i, which must be in the range
 // [FirstIndex()-1, LastIndex()]. The term of the entry before
 // FirstIndex is retained for matching purposes even though the
@@ -183,7 +172,7 @@ func (w *DiskStorage) Term(idx uint64) (uint64, error) {
 		return 0, raft.ErrCompacted
 	}
 
-	var e raftpb.Entry
+	var e pb.Entry
 	if _, err := w.seekEntry(&e, idx, false); err == errNotFound {
 		return 0, raft.ErrUnavailable
 	} else if err != nil {
@@ -197,7 +186,7 @@ func (w *DiskStorage) Term(idx uint64) (uint64, error) {
 
 var errNotFound = errors.New("Unable to find raft entry")
 
-func (w *DiskStorage) seekEntry(e *raftpb.Entry, seekTo uint64, reverse bool) (uint64, error) {
+func (w *DiskStorage) seekEntry(e *pb.Entry, seekTo uint64, reverse bool) (uint64, error) {
 	var index uint64
 	err := w.db.View(func(txn *badger.Txn) error {
 		opt := badger.DefaultIteratorOptions
@@ -223,33 +212,21 @@ func (w *DiskStorage) seekEntry(e *raftpb.Entry, seekTo uint64, reverse bool) (u
 	return index, err
 }
 
-var (
-	snapshotKey = "snapshot"
-	firstKey    = "first"
-	lastKey     = "last"
-)
-
 // FirstIndex returns the index of the first log entry that is
 // possibly available via Entries (older entries have been incorporated
 // into the latest Snapshot).
 func (w *DiskStorage) FirstIndex() (uint64, error) {
-	if val, ok := w.cache.Load(snapshotKey); ok {
-		snap, ok := val.(*raftpb.Snapshot)
-		if ok && !raft.IsEmptySnap(*snap) {
-			return snap.Metadata.Index + 1, nil
-		}
+	snap := w.cache.snapshot()
+	if !raft.IsEmptySnap(snap) {
+		return snap.Metadata.Index + 1, nil
 	}
-	if val, ok := w.cache.Load(firstKey); ok {
-		if first, ok := val.(uint64); ok {
-			return first, nil
-		}
+	if first := w.cache.first(); first > 0 {
+		return first, nil
 	}
-
-	// Now look into Badger.
 	index, err := w.seekEntry(nil, 0, false)
 	if err == nil {
 		glog.V(2).Infof("Setting first index: %d", index+1)
-		w.cache.Store(firstKey, index+1)
+		w.cache.setFirst(index + 1)
 	} else if glog.V(2) {
 		glog.Errorf("While seekEntry. Error: %v", err)
 	}
@@ -258,11 +235,6 @@ func (w *DiskStorage) FirstIndex() (uint64, error) {
 
 // LastIndex returns the index of the last entry in the log.
 func (w *DiskStorage) LastIndex() (uint64, error) {
-	if val, ok := w.cache.Load(lastKey); ok {
-		if last, ok := val.(uint64); ok {
-			return last, nil
-		}
-	}
 	return w.seekEntry(nil, math.MaxUint64, true)
 }
 
@@ -308,12 +280,9 @@ func (w *DiskStorage) deleteUntil(batch *badger.WriteBatch, until uint64) error 
 // If snapshot is temporarily unavailable, it should return ErrSnapshotTemporarilyUnavailable,
 // so raft state machine could know that Storage needs some time to prepare
 // snapshot and call Snapshot later.
-func (w *DiskStorage) Snapshot() (snap raftpb.Snapshot, rerr error) {
-	if val, ok := w.cache.Load(snapshotKey); ok {
-		snap, ok := val.(*raftpb.Snapshot)
-		if ok && !raft.IsEmptySnap(*snap) {
-			return *snap, nil
-		}
+func (w *DiskStorage) Snapshot() (snap pb.Snapshot, rerr error) {
+	if s := w.cache.snapshot(); !raft.IsEmptySnap(s) {
+		return s, nil
 	}
 	err := w.db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get(w.snapshotKey())
@@ -333,7 +302,7 @@ func (w *DiskStorage) Snapshot() (snap raftpb.Snapshot, rerr error) {
 // setSnapshot would store the snapshot. We can delete all the entries up until the snapshot
 // index. But, keep the raft entry at the snapshot index, to make it easier to build the logic; like
 // the dummy entry in MemoryStorage.
-func (w *DiskStorage) setSnapshot(batch *badger.WriteBatch, s raftpb.Snapshot) error {
+func (w *DiskStorage) setSnapshot(batch *badger.WriteBatch, s pb.Snapshot) error {
 	if raft.IsEmptySnap(s) {
 		return nil
 	}
@@ -341,35 +310,26 @@ func (w *DiskStorage) setSnapshot(batch *badger.WriteBatch, s raftpb.Snapshot) e
 	if err != nil {
 		return x.Wrapf(err, "wal.Store: While marshal snapshot")
 	}
-	if err := batch.Set(w.snapshotKey(), data); err != nil {
+	if err := batch.Set(w.snapshotKey(), data, 0); err != nil {
 		return err
 	}
 
-	e := raftpb.Entry{Term: s.Metadata.Term, Index: s.Metadata.Index}
+	e := pb.Entry{Term: s.Metadata.Term, Index: s.Metadata.Index}
 	data, err = e.Marshal()
 	if err != nil {
 		return err
 	}
-	if err := batch.Set(w.entryKey(e.Index), data); err != nil {
+	if err := batch.Set(w.entryKey(e.Index), data, 0); err != nil {
 		return err
 	}
 
-	// Update the last index cache here. This is useful so when a follower gets a jump due to
-	// receiving a snapshot and Save is called, addEntries wouldn't have much. So, the last index
-	// cache would need to rely upon this update here.
-	if val, ok := w.cache.Load(lastKey); ok {
-		le := val.(uint64)
-		if le < e.Index {
-			w.cache.Store(lastKey, e.Index)
-		}
-	}
-	// Cache snapshot.
-	w.cache.Store(snapshotKey, proto.Clone(&s))
+	// Cache it.
+	w.cache.setSnapshot(s)
 	return nil
 }
 
 // SetHardState saves the current HardState.
-func (w *DiskStorage) setHardState(batch *badger.WriteBatch, st raftpb.HardState) error {
+func (w *DiskStorage) setHardState(batch *badger.WriteBatch, st pb.HardState) error {
 	if raft.IsEmptyHardState(st) {
 		return nil
 	}
@@ -377,13 +337,11 @@ func (w *DiskStorage) setHardState(batch *badger.WriteBatch, st raftpb.HardState
 	if err != nil {
 		return x.Wrapf(err, "wal.Store: While marshal hardstate")
 	}
-	return batch.Set(w.hardStateKey(), data)
+	return batch.Set(w.hardStateKey(), data, 0)
 }
 
 // reset resets the entries. Used for testing.
-func (w *DiskStorage) reset(es []raftpb.Entry) error {
-	w.cache = new(sync.Map) // reset cache.
-
+func (w *DiskStorage) reset(es []pb.Entry) error {
 	// Clean out the state.
 	batch := w.db.NewWriteBatch()
 	defer batch.Cancel()
@@ -398,7 +356,7 @@ func (w *DiskStorage) reset(es []raftpb.Entry) error {
 			return x.Wrapf(err, "wal.Store: While marshal entry")
 		}
 		k := w.entryKey(e.Index)
-		if err := batch.Set(k, data); err != nil {
+		if err := batch.Set(k, data, 0); err != nil {
 			return err
 		}
 	}
@@ -441,7 +399,7 @@ func (w *DiskStorage) deleteFrom(batch *badger.WriteBatch, from uint64) error {
 	return w.deleteKeys(batch, keys)
 }
 
-func (w *DiskStorage) HardState() (hd raftpb.HardState, rerr error) {
+func (w *DiskStorage) HardState() (hd pb.HardState, rerr error) {
 	w.elog.Printf("HardState")
 	defer w.elog.Printf("Done")
 	err := w.db.View(func(txn *badger.Txn) error {
@@ -460,14 +418,14 @@ func (w *DiskStorage) HardState() (hd raftpb.HardState, rerr error) {
 }
 
 // InitialState returns the saved HardState and ConfState information.
-func (w *DiskStorage) InitialState() (hs raftpb.HardState, cs raftpb.ConfState, err error) {
+func (w *DiskStorage) InitialState() (hs pb.HardState, cs pb.ConfState, err error) {
 	w.elog.Printf("InitialState")
 	defer w.elog.Printf("Done")
 	hs, err = w.HardState()
 	if err != nil {
 		return
 	}
-	var snap raftpb.Snapshot
+	var snap pb.Snapshot
 	snap, err = w.Snapshot()
 	if err != nil {
 		return
@@ -493,7 +451,7 @@ func (w *DiskStorage) NumEntries() (int, error) {
 	return count, err
 }
 
-func (w *DiskStorage) allEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, rerr error) {
+func (w *DiskStorage) allEntries(lo, hi, maxSize uint64) (es []pb.Entry, rerr error) {
 	err := w.db.View(func(txn *badger.Txn) error {
 		if hi-lo == 1 { // We only need one entry.
 			item, err := txn.Get(w.entryKey(lo))
@@ -501,7 +459,7 @@ func (w *DiskStorage) allEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, rer
 				return err
 			}
 			return item.Value(func(val []byte) error {
-				var e raftpb.Entry
+				var e pb.Entry
 				if err = e.Unmarshal(val); err != nil {
 					return err
 				}
@@ -522,7 +480,7 @@ func (w *DiskStorage) allEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, rer
 		first := true
 		for itr.Seek(start); itr.Valid(); itr.Next() {
 			item := itr.Item()
-			var e raftpb.Entry
+			var e pb.Entry
 			if err := item.Value(func(val []byte) error {
 				return e.Unmarshal(val)
 			}); err != nil {
@@ -550,7 +508,7 @@ func (w *DiskStorage) allEntries(lo, hi, maxSize uint64) (es []raftpb.Entry, rer
 // Entries returns a slice of log entries in the range [lo,hi).
 // MaxSize limits the total size of the log entries returned, but
 // Entries returns at least one entry if any.
-func (w *DiskStorage) Entries(lo, hi, maxSize uint64) (es []raftpb.Entry, rerr error) {
+func (w *DiskStorage) Entries(lo, hi, maxSize uint64) (es []pb.Entry, rerr error) {
 	w.elog.Printf("Entries: [%d, %d) maxSize:%d", lo, hi, maxSize)
 	defer w.elog.Printf("Done")
 	first, err := w.FirstIndex()
@@ -572,7 +530,7 @@ func (w *DiskStorage) Entries(lo, hi, maxSize uint64) (es []raftpb.Entry, rerr e
 	return w.allEntries(lo, hi, maxSize)
 }
 
-func (w *DiskStorage) CreateSnapshot(i uint64, cs *raftpb.ConfState, data []byte) error {
+func (w *DiskStorage) CreateSnapshot(i uint64, cs *pb.ConfState, data []byte) error {
 	glog.V(2).Infof("CreateSnapshot i=%d, cs=%+v", i, cs)
 	first, err := w.FirstIndex()
 	if err != nil {
@@ -583,7 +541,7 @@ func (w *DiskStorage) CreateSnapshot(i uint64, cs *raftpb.ConfState, data []byte
 		return raft.ErrSnapOutOfDate
 	}
 
-	var e raftpb.Entry
+	var e pb.Entry
 	if _, err := w.seekEntry(&e, i, false); err != nil {
 		return err
 	}
@@ -591,7 +549,7 @@ func (w *DiskStorage) CreateSnapshot(i uint64, cs *raftpb.ConfState, data []byte
 		return errNotFound
 	}
 
-	var snap raftpb.Snapshot
+	var snap pb.Snapshot
 	snap.Metadata.Index = i
 	snap.Metadata.Term = e.Term
 	x.AssertTrue(cs != nil)
@@ -613,7 +571,7 @@ func (w *DiskStorage) CreateSnapshot(i uint64, cs *raftpb.ConfState, data []byte
 // first, then HardState and Snapshot if they are not empty. If persistent storage supports atomic
 // writes then all of them can be written together. Note that when writing an Entry with Index i,
 // any previously-persisted entries with Index >= i must be discarded.
-func (w *DiskStorage) Save(h raftpb.HardState, es []raftpb.Entry, snap raftpb.Snapshot) error {
+func (w *DiskStorage) Save(h pb.HardState, es []pb.Entry, snap pb.Snapshot) error {
 	batch := w.db.NewWriteBatch()
 	defer batch.Cancel()
 
@@ -630,7 +588,7 @@ func (w *DiskStorage) Save(h raftpb.HardState, es []raftpb.Entry, snap raftpb.Sn
 }
 
 // Append the new entries to storage.
-func (w *DiskStorage) addEntries(batch *badger.WriteBatch, entries []raftpb.Entry) error {
+func (w *DiskStorage) addEntries(batch *badger.WriteBatch, entries []pb.Entry) error {
 	if len(entries) == 0 {
 		return nil
 	}
@@ -653,7 +611,7 @@ func (w *DiskStorage) addEntries(batch *badger.WriteBatch, entries []raftpb.Entr
 	if err != nil {
 		return err
 	}
-	// firste can exceed last if Raft makes a jump.
+	x.AssertTruef(firste <= last+1, "firste: %d. last: %d", firste, last)
 
 	for _, e := range entries {
 		k := w.entryKey(e.Index)
@@ -661,18 +619,13 @@ func (w *DiskStorage) addEntries(batch *badger.WriteBatch, entries []raftpb.Entr
 		if err != nil {
 			return x.Wrapf(err, "wal.Append: While marshal entry")
 		}
-		if err := batch.Set(k, data); err != nil {
+		if err := batch.Set(k, data, 0); err != nil {
 			return err
 		}
 	}
 	laste := entries[len(entries)-1].Index
-	w.cache.Store(lastKey, laste) // Update the last index cache.
 	if laste < last {
 		return w.deleteFrom(batch, laste+1)
 	}
 	return nil
-}
-
-func (w *DiskStorage) Sync() error {
-	return w.db.Sync()
 }

@@ -31,10 +31,17 @@ var (
 	BytesRead     *expvar.Int
 	BytesWrite    *expvar.Int
 	NumQueries    *expvar.Int
+	LcacheHit     *expvar.Int
+	LcacheMiss    *expvar.Int
+	LcacheRace    *expvar.Int
+	LcacheEvicts  *expvar.Int
 
 	// value at particular point of time
 	PendingQueries   *expvar.Int
 	PendingProposals *expvar.Int
+	LcacheSize       *expvar.Int
+	LcacheLen        *expvar.Int
+	LcacheCapacity   *expvar.Int
 	DirtyMapSize     *expvar.Int
 	NumGoRoutines    *expvar.Int
 	MemoryInUse      *expvar.Int
@@ -44,8 +51,6 @@ var (
 	AlphaHealth      *expvar.Int
 	MaxPlSize        *expvar.Int
 	MaxPlLength      *expvar.Int
-	RaftAppliedIndex *expvar.Int
-	MaxAssignedTs    *expvar.Int
 
 	PredicateStats *expvar.Map
 	Conf           *expvar.Map
@@ -72,10 +77,15 @@ func init() {
 	ActiveMutations = expvar.NewInt("dgraph_active_mutations_total")
 	PredicateStats = expvar.NewMap("dgraph_predicate_stats")
 	Conf = expvar.NewMap("dgraph_config")
+	LcacheHit = expvar.NewInt("dgraph_lru_hits_total")
+	LcacheMiss = expvar.NewInt("dgraph_lru_miss_total")
+	LcacheRace = expvar.NewInt("dgraph_lru_race_total")
+	LcacheEvicts = expvar.NewInt("dgraph_lru_evicted_total")
+	LcacheSize = expvar.NewInt("dgraph_lru_size_bytes")
+	LcacheLen = expvar.NewInt("dgraph_lru_keys_total")
+	LcacheCapacity = expvar.NewInt("dgraph_lru_capacity_bytes")
 	MaxPlSize = expvar.NewInt("dgraph_max_list_bytes")
 	MaxPlLength = expvar.NewInt("dgraph_max_list_length")
-	RaftAppliedIndex = expvar.NewInt("dgraph_raft_applied_index")
-	MaxAssignedTs = expvar.NewInt("dgraph_max_assigned_ts")
 
 	go func() {
 		ticker := time.NewTicker(5 * time.Second)
@@ -148,16 +158,6 @@ func init() {
 		"dgraph_max_list_length": prometheus.NewDesc(
 			"dgraph_max_list_length",
 			"dgraph_max_list_length",
-			nil, nil,
-		),
-		"dgraph_raft_applied_index": prometheus.NewDesc(
-			"dgraph_raft_applied_index",
-			"dgraph_raft_applied_index",
-			nil, nil,
-		),
-		"dgraph_max_assigned_ts": prometheus.NewDesc(
-			"dgraph_max_assigned_ts",
-			"dgraph_max_assigned_ts",
 			nil, nil,
 		),
 		"dgraph_pending_proposals_total": prometheus.NewDesc(

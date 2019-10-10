@@ -18,17 +18,14 @@ package badger
 
 import (
 	"sync"
-
-	"github.com/dgraph-io/badger/y"
 )
 
-// WriteBatch holds the necessary info to perform batched writes.
 type WriteBatch struct {
 	sync.Mutex
-	txn      *Txn
-	db       *DB
-	throttle *y.Throttle
-	err      error
+	txn *Txn
+	db  *DB
+	wg  sync.WaitGroup
+	err error
 }
 
 // NewWriteBatch creates a new WriteBatch. This provides a way to conveniently do a lot of writes,
@@ -37,18 +34,7 @@ type WriteBatch struct {
 // creating and committing transactions. Due to the nature of SSI guaratees provided by Badger,
 // blind writes can never encounter transaction conflicts (ErrConflict).
 func (db *DB) NewWriteBatch() *WriteBatch {
-	return &WriteBatch{
-		db:       db,
-		txn:      db.newTransaction(true, true),
-		throttle: y.NewThrottle(16),
-	}
-}
-
-// SetMaxPendingTxns sets a limit on maximum number of pending transactions while writing batches.
-// This function should be called before using WriteBatch. Default value of MaxPendingTxns is
-// 16 to minimise memory usage.
-func (wb *WriteBatch) SetMaxPendingTxns(max int) {
-	wb.throttle = y.NewThrottle(max)
+	return &WriteBatch{db: db, txn: db.newTransaction(true, true)}
 }
 
 // Cancel function must be called if there's a chance that Flush might not get
@@ -59,15 +45,13 @@ func (wb *WriteBatch) SetMaxPendingTxns(max int) {
 //
 // Note that any committed writes would still go through despite calling Cancel.
 func (wb *WriteBatch) Cancel() {
-	if err := wb.throttle.Finish(); err != nil {
-		wb.db.opt.Errorf("WatchBatch.Cancel error while finishing: %v", err)
-	}
+	wb.wg.Wait()
 	wb.txn.Discard()
 }
 
 func (wb *WriteBatch) callback(err error) {
 	// sync.WaitGroup is thread-safe, so it doesn't need to be run inside wb.Lock.
-	defer wb.throttle.Done(err)
+	defer wb.wg.Done()
 	if err == nil {
 		return
 	}
@@ -80,12 +64,12 @@ func (wb *WriteBatch) callback(err error) {
 	wb.err = err
 }
 
-// SetEntry is the equivalent of Txn.SetEntry.
-func (wb *WriteBatch) SetEntry(e *Entry) error {
+// Set is equivalent of Txn.SetWithMeta.
+func (wb *WriteBatch) Set(k, v []byte, meta byte) error {
 	wb.Lock()
 	defer wb.Unlock()
 
-	if err := wb.txn.SetEntry(e); err != ErrTxnTooBig {
+	if err := wb.txn.SetWithMeta(k, v, meta); err != ErrTxnTooBig {
 		return err
 	}
 	// Txn has reached it's zenith. Commit now.
@@ -94,17 +78,11 @@ func (wb *WriteBatch) SetEntry(e *Entry) error {
 	}
 	// This time the error must not be ErrTxnTooBig, otherwise, we make the
 	// error permanent.
-	if err := wb.txn.SetEntry(e); err != nil {
+	if err := wb.txn.SetWithMeta(k, v, meta); err != nil {
 		wb.err = err
 		return err
 	}
 	return nil
-}
-
-// Set is equivalent of Txn.Set().
-func (wb *WriteBatch) Set(k, v []byte) error {
-	e := &Entry{Key: k, Value: v}
-	return wb.SetEntry(e)
 }
 
 // Delete is equivalent of Txn.Delete.
@@ -130,9 +108,9 @@ func (wb *WriteBatch) commit() error {
 	if wb.err != nil {
 		return wb.err
 	}
-	if err := wb.throttle.Do(); err != nil {
-		return err
-	}
+	// Get a new txn before we commit this one. So, the new txn doesn't need
+	// to wait for this one to commit.
+	wb.wg.Add(1)
 	wb.txn.CommitWith(wb.callback)
 	wb.txn = wb.db.newTransaction(true, true)
 	wb.txn.readTs = 0 // We're not reading anything.
@@ -147,10 +125,8 @@ func (wb *WriteBatch) Flush() error {
 	wb.txn.Discard()
 	wb.Unlock()
 
-	if err := wb.throttle.Finish(); err != nil {
-		return err
-	}
-
+	wb.wg.Wait()
+	// Safe to access error without any synchronization here.
 	return wb.err
 }
 

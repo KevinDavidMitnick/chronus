@@ -60,6 +60,12 @@ func (item *Item) String() string {
 	return fmt.Sprintf("key=%q, version=%d, meta=%x", item.Key(), item.Version(), item.meta)
 }
 
+// Deprecated
+// ToString returns a string representation of Item
+func (item *Item) ToString() string {
+	return item.String()
+}
+
 // Key returns the key.
 //
 // Key is only valid as long as item is valid, or transaction is valid.  If you need to use it
@@ -94,9 +100,7 @@ func (item *Item) Value(fn func(val []byte) error) error {
 	item.wg.Wait()
 	if item.status == prefetched {
 		if item.err == nil && fn != nil {
-			if err := fn(item.val); err != nil {
-				return err
-			}
+			fn(item.val)
 		}
 		return item.err
 	}
@@ -140,8 +144,6 @@ func (item *Item) IsDeletedOrExpired() bool {
 	return isDeletedOrExpired(item.meta, item.expiresAt)
 }
 
-// DiscardEarlierVersions returns whether the item was created with the
-// option to discard earlier versions of a key when multiple are available.
 func (item *Item) DiscardEarlierVersions() bool {
 	return item.meta&bitDiscardEarlierVersions > 0
 }
@@ -180,10 +182,8 @@ func (item *Item) yieldItemValue() ([]byte, func(), error) {
 		// move key and read that instead.
 		runCallback(cb)
 		// Do not put badgerMove on the left in append. It seems to cause some sort of manipulation.
-		keyTs := y.KeyWithTs(item.Key(), item.Version())
-		key = make([]byte, len(badgerMove)+len(keyTs))
-		n := copy(key, badgerMove)
-		copy(key[n:], keyTs)
+		key = append([]byte{}, badgerMove...)
+		key = append(key, y.KeyWithTs(item.Key(), item.Version())...)
 		// Note that we can't set item.key to move key, because that would
 		// change the key user sees before and after this call. Also, this move
 		// logic is internal logic and should not impact the external behavior
@@ -244,12 +244,6 @@ func (item *Item) EstimatedSize() int64 {
 	var vp valuePointer
 	vp.Decode(item.vptr)
 	return int64(vp.Len) // includes key length.
-}
-
-// KeySize returns the size of the key.
-// Exact size of the key is key + 8 bytes of timestamp
-func (item *Item) KeySize() int64 {
-	return int64(len(item.key))
 }
 
 // ValueSize returns the exact size of the value.
@@ -334,10 +328,10 @@ type IteratorOptions struct {
 	Prefix      []byte // Only iterate over this given prefix.
 	prefixIsKey bool   // If set, use the prefix for bloom filter lookup.
 
-	InternalAccess bool // Used to allow internal access to badger keys.
+	internalAccess bool // Used to allow internal access to badger keys.
 }
 
-func (opt *IteratorOptions) pickTable(t table.TableInterface) bool {
+func (opt *IteratorOptions) PickTable(t table.TableInterface) bool {
 	if len(opt.Prefix) == 0 {
 		return true
 	}
@@ -539,7 +533,7 @@ func (it *Iterator) parseItem() bool {
 	}
 
 	// Skip badger keys.
-	if !it.opt.InternalAccess && bytes.HasPrefix(key, badgerPrefix) {
+	if !it.opt.internalAccess && bytes.HasPrefix(key, badgerPrefix) {
 		mi.Next()
 		return false
 	}
@@ -648,9 +642,9 @@ func (it *Iterator) prefetch() {
 	}
 }
 
-// Seek would seek to the provided key if present. If absent, it would seek to the next
-// smallest key greater than the provided key if iterating in the forward direction.
-// Behavior would be reversed if iterating backwards.
+// Seek would seek to the provided key if present. If absent, it would seek to the next smallest key
+// greater than the provided key if iterating in the forward direction. Behavior would be reversed if
+// iterating backwards.
 func (it *Iterator) Seek(key []byte) {
 	for i := it.data.pop(); i != nil; i = it.data.pop() {
 		i.wg.Wait()
