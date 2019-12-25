@@ -1,0 +1,21 @@
+num-pending-proposals = 1000
+tracing = true
+my-addr = "127.0.0.1:2347"
+raft-id = 1
+tick-time-ms = 20
+election-tick = 100
+heartbeat-tick = 1
+max-size-per-msg = 4096
+max-inflight-msgs = 256
+wal-dir = "./wal"
+snapshot-interval = 60
+checksum-interval = 10
+retention-auto-create = true
+
+[[peers]]
+addr = "127.0.0.1:8777"
+raft-id=2
+
+[[peers]]
+addr = "127.0.0.1:8888"
+raft-id=3
